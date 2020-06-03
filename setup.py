@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="covid19_sim",
-    version="0.1",
+    version="0.2",
     author="Firat Sabancioglu",
     description="Covid-19 Simulation",
     long_description='An agent-based simulation to discover which strategies are best to contain a covid-19 outbreak and minimize damage to freedoms',

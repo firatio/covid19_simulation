@@ -42,7 +42,8 @@ Once the simulations end, a json output file will be generated in the results fo
 ```bash
 python run_analysis.py
 ```
-The results will be displayed as a bar chart. This script analyzes the latest file by default. In order to analyze other files, you need to change the script and pass a list of file names as the argument.
+The results will be displayed as a bar chart.
+This script analyzes the latest file by default. In order to analyze other files, you need to change the script and pass a list of file names as the argument.
 
 # How to configure a simulation
 - More information will be here soon.
@@ -52,8 +53,8 @@ The results will be displayed as a bar chart. This script analyzes the latest fi
 
 # Assumptions, rules and definitions
 - Each day, each person interacts with up to 8 nearby contacts unless they are in quarantine. Each person's interactions happen one after another but each person is selected randomly from the population.
-- If long distance travel is enabled, locations of some people are swapped with each other to simulate long distance traveling.
 - There is a probability for an infected person to infect another person in each interaction.
+- If air travel is enabled, locations of some people are swapped with each other to simulate air travel. The probability of getting infected during air travel is related to the percentage of infected people in the population.
 - By default, 20% of all cases are assumed to be asymptomatic.
 - Deaths and fatality of the disease are ignored. It is assumed that everything else being equal, minimizing the number of infected people and maximum infection rate will minimize deaths.
 - Infected people recover from the disease between 14 and 21 days. Both symptomatic and asymptomatic cases become recovered/immune when they recover.

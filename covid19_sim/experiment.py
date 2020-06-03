@@ -123,6 +123,7 @@ def run_sim(sim_function, n=100):
         "asymptomatic_ratio": sim.asymptomatic_ratio,
         "diagnostic_test_info": sim.diagnostic_test.get_properties(),
         "long_distance_travel": sim.long_distance_travel,
+        "air_travel": sim.air_travel,
         "intervention": sim.intervention,
         "general_quarantine": sim.general_quarantine,
         "general_quarantine_percent": sim.general_quarantine_percent,

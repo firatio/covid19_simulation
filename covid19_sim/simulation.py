@@ -132,8 +132,13 @@ class Simulation:
         self.intervention = kwargs.get('intervention', [False, None, None])
 
         # long distance travel
+        # NOTE: this will be modified in later versions!
         # [is_on?, traveler_percentage, min_distance_percentage]
         self.long_distance_travel = kwargs.get('long_distance_travel', [False, 0, 0])
+
+        # air travel. based on a new model, different from long_distance_travel
+        # [is_on?, traveler_percentage, min_distance_percentage]
+        self.air_travel = kwargs.get('air_travel', [False, 0, 0])
 
         # TESTING STRATEGY PARAMETERS
         self.testing_strategy = kwargs.get('testing_strategy', None)
@@ -359,15 +364,18 @@ class Simulation:
         """generate a short description of the simulation based on parameters"""
         txt = '[' + str(self.width) + ', ' + str(self.height) + '] '
 
-        if self.long_distance_travel[0]:
+        if self.air_travel[0]:
+            txt += 'Air travel enabled. '
+        elif not self.long_distance_travel[0]:
+            txt += 'Air travel disabled. '
+        elif self.long_distance_travel[0]:
             txt += 'Long distance travel enabled. '
-        else:
-            txt += 'Long distance travel disabled. '
+        
         if self.test_before_travel or self.test_after_travel:
             if self.test_before_travel:
-                txt += 'Long distance travelers tested before travel. '
+                txt += 'Travelers tested before travel. '
             if self.test_after_travel:
-                txt += 'Long distance travelers tested after travel. '
+                txt += 'Travelers tested after travel. '
             if self.isolate_travelers:
                 txt += 'Travelers isolated if tested positive. '
 
@@ -963,6 +971,113 @@ class Simulation:
         else:
             test_with_scan_strategy()
 
+    def swap_people(self, p1, p2):
+            """Swap p1 and p2's locations."""
+            p1_x = p1.x
+            p1_y = p1.y
+            # put p1 to p2's location
+            p1.x = p2.x
+            p1.y = p2.y
+            self.world[p1.x][p1.y] = p1
+            # put p2 to p1's location
+            p2.x = p1_x
+            p2.y = p1_y
+            self.world[p2.x][p2.y] = p2
+
+    def simulate_air_travel(self):
+        """Simulates air travel in the society by selecting n people 
+        not in quarantine, swapping their places with others who are not 
+        in the list and are at least D distance away."""
+        traveler_percentage = self.air_travel[1]
+        min_distance_percentage = self.air_travel[2]
+        to_be_moved = []
+        # number of air travelers
+        n = int(traveler_percentage*len(self.population))
+
+        not_in_quarantine = [p for p in self.population if not p.in_quarantine]
+        free = len(not_in_quarantine)
+        if n*2 > free:
+            n = math.floor(free/2)
+
+        # randomly select some as to be moved
+        random.shuffle(not_in_quarantine)
+        for i in range(n):
+            to_be_moved.append(not_in_quarantine.pop(0))
+
+        # min distance is min distance percentage of world's diagonal length
+        min_distance_square = min_distance_percentage*(self.width**2 + self.height**2)
+
+        sim_population_size = self.width * self.height
+        # for now, probability that a passenger is infected is equal to 
+        # the percentage of infected in the general population
+        # Later: 
+        # -- this probability should be based on the local percentage 
+        # of infected people.
+        probability_passenger_is_infected = self.last_snapshot[1] / sim_population_size
+        probability_passenger_is_recovered = self.last_snapshot[2] / sim_population_size
+
+        # testing will reduce number of infected passengers boarding a plane
+        if self.test_before_travel:
+            probability_passenger_is_infected = probability_passenger_is_infected * (1 - self.diagnostic_test.get_accuracy())
+
+        # each infected passenger will be assumed to infect 8 other susceptible
+        # passengers during the flight, limited by susceptible passengers
+        # Later:
+        # -- infection during flight should be better modeled
+        susceptible_passengers_ratio = 1 - (probability_passenger_is_infected + probability_passenger_is_recovered)
+        newly_infected_ratio = probability_passenger_is_infected * 8
+        if newly_infected_ratio > susceptible_passengers_ratio:
+            newly_infected_ratio = susceptible_passengers_ratio
+        probability_to_get_infected = newly_infected_ratio
+
+        #print(self.current_day, flush=True)
+        #print(total_flights_sim, flush=True)
+        #print(probability_to_get_infected, flush=True)
+        
+        while to_be_moved:
+            p1 = to_be_moved.pop(0)
+
+            # if travelers are tested before travel and p1 is positive, 
+            # continue with next traveler
+            if self.test_before_travel and self.run_diagnostic_test(p1, isolate_if_positive = self.isolate_travelers):
+                continue
+
+            # find another traveler to swap with
+            for i in range(len(not_in_quarantine)):
+                p2 = not_in_quarantine[i]
+                # if distance is greater than minimum distance,
+                # swap their locations and remove p2 from list
+                if (p1.x - p2.x)**2 + (p1.y - p2.y)**2 >= min_distance_square:
+                    # if travelers are tested before travel and p1 is positive, 
+                    # continue with next traveler
+                    if self.test_before_travel and self.run_diagnostic_test(p2, isolate_if_positive = self.isolate_travelers):
+                        continue
+
+                    # If a traveler is infected, traveler remains 
+                    # infected. If the traveler is susceptible,
+                    # there is a risk for the traveler to get infected during
+                    # air travel. If the risk happens, traveler will be 
+                    # infected at the new location. 
+                    travelers = [p1, p2]
+                    for p in travelers:
+                        if p.status == Status.SUSCEPTIBLE:
+                            if happens(probability_to_get_infected):
+                                #print('infected during flight', flush=True)
+                                p.status = Status.INFECTED
+                                if happens(self.asymptomatic_ratio):
+                                    p.infection_type == InfectionType.ASYMPTOMATIC
+                    
+                    self.swap_people(p1, p2)
+                    del not_in_quarantine[i]
+                    
+                    # if travelers are tested after travel, test them
+                    if self.test_after_travel:
+                        self.run_diagnostic_test(p1, isolate_if_positive = self.isolate_travelers)
+                        self.run_diagnostic_test(p2, isolate_if_positive = self.isolate_travelers)
+                    
+                    # if a traveler is found, end the search
+                    break
+
     def simulate_interactions(self):
         """ Compute how infection propagates in the population.
         Take each person and compute whether they infect others or get
@@ -1097,7 +1212,11 @@ class Simulation:
                     interact( p, self.world[x][y+1] )
 
         # simulate travel and interactions
-        if self.long_distance_travel[0]:
+        # air travel has priority over long distance travel
+        # long distance travel and air travel are mutually exclusive
+        if self.air_travel[0]:
+            self.simulate_air_travel()
+        elif self.long_distance_travel[0]:
             simulate_long_distance_travel()
         close_interactions()
     
